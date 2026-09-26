@@ -2,8 +2,10 @@ import { useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Drone } from "./Drone";
+import { SatelliteGround, SatelliteAttribution } from "./SatelliteGround";
+import { OsmBuildings } from "./OsmBuildings";
 
-// Composant invisible pour capturer la vue depuis la position du drone vers le bas
+// Composant invisible pour capturer la vue depuis la position du drone vers le bas (façon satellite)
 function SatelliteCapture({ target, triggerRef }) {
   const { gl, scene } = useThree();
 
@@ -12,12 +14,9 @@ function SatelliteCapture({ target, triggerRef }) {
       const drone = target.current;
       if (!drone) return;
 
-      // 1. Sauvegarde de la position et de l'orientation actuelles du renderer/caméra principale si besoin
-      // 2. Création d'une caméra temporaire positionnée sur le drone et orientée vers le bas (-Y)
       const captureCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
       captureCamera.position.copy(drone.position);
 
-      // Oriente la caméra strictement vers le bas
       captureCamera.up.set(0, 0, -1);
       captureCamera.lookAt(
         drone.position.x,
@@ -25,19 +24,14 @@ function SatelliteCapture({ target, triggerRef }) {
         drone.position.z
       );
 
-      // 3. Force le rendu de la scène avec cette caméra zénithale
       gl.render(scene, captureCamera);
 
-      // 4. Récupération de l'image sous forme de Data URL
       const dataUrl = gl.domElement.toDataURL("image/png");
 
-      // 5. Déclenchement du téléchargement (équivalent de l'enregistrement)
       const link = document.createElement("a");
       link.download = `drone_sat_${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
-
-      // Note : Le canvas principal se rafraîchira automatiquement à la frame suivante avec la caméra normale.
     };
   }, [gl, scene, target, triggerRef]);
 
@@ -59,7 +53,7 @@ function ChaseCamera({ target }) {
   return null;
 }
 
-// Met à jour le HUD (DOM hors Canvas) sans re-render React à 60fps
+// Met à jour le HUD sans re-render React à 60fps
 function HudUpdater({ target, refs }) {
   useFrame(() => {
     const drone = target.current;
@@ -113,11 +107,9 @@ export default function DroneSimScene() {
         <hemisphereLight args={["#bfe3f7", "#4a6b4f", 0.8]} />
         <directionalLight position={[30, 50, 20]} intensity={1.3} />
 
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[400, 400]} />
-          <meshStandardMaterial color="#5f9463" />
-        </mesh>
-        <gridHelper args={[400, 80, "#ffffff", "#88b98a"]} />
+        {/* Sol et bâtiments 3D réalistes */}
+        <SatelliteGround lat={48.8566} lon={2.3522} zoom={18} gridSize={5} />
+        <OsmBuildings lat={48.8566} lon={2.3522} radiusMeters={250} />
 
         <Drone ref={droneRef} />
         <ChaseCamera target={droneRef} />
@@ -136,7 +128,7 @@ export default function DroneSimScene() {
         </div>
       </div>
 
-      {/* Bouton de capture photo satellite */}
+      {/* Bouton de capture photo satellite zénithale */}
       <div style={buttonContainerStyle}>
         <button style={snapshotBtnStyle} onClick={handleTakeSnapshot}>
           📸 Prendre une photo satellite
@@ -145,11 +137,10 @@ export default function DroneSimScene() {
 
       <div style={legendStyle}>
         Translation (à plat, toujours horizontale) : <b>↑/↓</b> avant-arrière ·{" "}
-        <b>←/→</b> strafe ou rotation (si vitesse = 0) · <b>Espace/Maj</b>{" "}
-        monter-descendre
-        <br />
-        Vitesse : touches <b>+ / -</b> du pavé numérique (ou <b>= / -</b>)
+        <b>←/→</b> strafe ou rotation · <b>Espace/Maj</b> monter-descendre
       </div>
+
+      <SatelliteAttribution />
     </div>
   );
 }
@@ -169,6 +160,7 @@ const hudWrapStyle = {
   fontFamily: "sans-serif",
   fontSize: 13,
   textShadow: "0 1px 2px rgba(255,255,255,.6)",
+  zIndex: 10,
 };
 
 const hudBoxStyle = {
@@ -199,7 +191,7 @@ const snapshotBtnStyle = {
   fontWeight: "bold",
   cursor: "pointer",
   boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-  transition: "background 0.2s",
+  pointerEvents: "auto",
 };
 
 const legendStyle = {
@@ -214,4 +206,5 @@ const legendStyle = {
   borderRadius: 10,
   padding: "8px 12px",
   maxWidth: 480,
+  zIndex: 10,
 };
