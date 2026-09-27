@@ -2,8 +2,7 @@ import { useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Drone } from "./Drone";
-import { SatelliteGround, SatelliteAttribution } from "./SatelliteGround";
-import { OsmBuildings } from "./OsmBuildings";
+import { CityModel } from "./Citymodel";
 
 // Composant invisible pour capturer la vue depuis la position du drone vers le bas (façon satellite)
 function SatelliteCapture({ target, triggerRef }) {
@@ -107,9 +106,8 @@ export default function DroneSimScene() {
         <hemisphereLight args={["#bfe3f7", "#4a6b4f", 0.8]} />
         <directionalLight position={[30, 50, 20]} intensity={1.3} />
 
-        {/* Sol et bâtiments 3D réalistes */}
-        <SatelliteGround lat={48.8566} lon={2.3522} zoom={18} gridSize={5} />
-        <OsmBuildings lat={48.8566} lon={2.3522} radiusMeters={250} />
+        {/* Ville exportée depuis Blender — place city.glb dans public/models/ */}
+        <CityModel url="/models/city.glb" scale={1} />
 
         <Drone ref={droneRef} />
         <ChaseCamera target={droneRef} />
@@ -139,8 +137,6 @@ export default function DroneSimScene() {
         Translation (à plat, toujours horizontale) : <b>↑/↓</b> avant-arrière ·{" "}
         <b>←/→</b> strafe ou rotation · <b>Espace/Maj</b> monter-descendre
       </div>
-
-      <SatelliteAttribution />
     </div>
   );
 }

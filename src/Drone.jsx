@@ -4,16 +4,24 @@ import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 
 import { useKeyboardControls } from "./useKeyboardControls";
+import { getBuildings } from "./buildingRegistry";
+
+console.log(
+  "%c[Drone] FICHIER V3 CHARGÉ (avec collisions)",
+  "background:#0a0;color:#fff;font-weight:bold;padding:2px 6px;"
+);
 
 const DEFAULT_MOVE_SPEED = 8;
-const MIN_SPEED = 0; // Vitesse à 0 autorisée pour le mode stationnaire
+const MIN_SPEED = 0;
 const MAX_SPEED = 20;
 const SPEED_STEP = 2;
 
-const YAW_SPEED = 1.8; // Vitesse de rotation sur soi-même avec les flèches
+const YAW_SPEED = 1.8;
 
 const MAX_TILT = 0.5;
 const TILT_EASE = 6;
+
+const DRONE_RADIUS = 0.9; // rayon de collision approximatif du drone (mètres)
 
 const ARM_POSITIONS = [
   { x: 1.1, z: 1.1, front: true },
@@ -21,6 +29,25 @@ const ARM_POSITIONS = [
   { x: 1.1, z: -1.1, front: false },
   { x: -1.1, z: -1.1, front: false },
 ];
+
+// Vrai si (x,y,z) tombe à l'intérieur d'un bâtiment enregistré (+ marge = rayon du drone).
+// Au-dessus du toit (y > hauteur du bâtiment), on laisse passer -> permet de survoler.
+function collidesAt(x, y, z) {
+  const buildings = getBuildings();
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    if (
+      x > b.minX - DRONE_RADIUS &&
+      x < b.maxX + DRONE_RADIUS &&
+      z > b.minZ - DRONE_RADIUS &&
+      z < b.maxZ + DRONE_RADIUS &&
+      y < b.maxY + 0.5
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export const Drone = forwardRef(function Drone(props, ref) {
   const keys = useKeyboardControls();
@@ -95,7 +122,6 @@ export const Drone = forwardRef(function Drone(props, ref) {
     // COMPORTEMENT SELON LA VITESSE (0 = Rotation sur soi / >0 = Déplacement)
     // =========================================================
     if (speed === 0) {
-      // Vitesse à 0 : Les flèches Gauche / Droite font tourner le drone sur lui-même (360°)
       if (k["ArrowLeft"]) {
         drone.rotation.y += YAW_SPEED * dt;
       }
@@ -103,7 +129,6 @@ export const Drone = forwardRef(function Drone(props, ref) {
         drone.rotation.y -= YAW_SPEED * dt;
       }
     } else {
-      // Vitesse > 0 : Déplacement normal avec les flèches
       moveDirection.current.set(0, 0, 0);
 
       if (k["ArrowUp"]) moveDirection.current.add(forward.current);
@@ -114,8 +139,17 @@ export const Drone = forwardRef(function Drone(props, ref) {
       if (moveDirection.current.lengthSq() > 0) {
         moveDirection.current.normalize();
 
-        drone.position.x += moveDirection.current.x * speed * dt;
-        drone.position.z += moveDirection.current.z * speed * dt;
+        // --- Déplacement avec collision, testée séparément sur X et Z ---
+        // (permet de "glisser" le long d'un mur au lieu d'être bloqué net sur les deux axes)
+        const nextX = drone.position.x + moveDirection.current.x * speed * dt;
+        const nextZ = drone.position.z + moveDirection.current.z * speed * dt;
+
+        if (!collidesAt(nextX, drone.position.y, drone.position.z)) {
+          drone.position.x = nextX;
+        }
+        if (!collidesAt(drone.position.x, drone.position.y, nextZ)) {
+          drone.position.z = nextZ;
+        }
 
         if (!k["ArrowDown"] || k["ArrowLeft"] || k["ArrowRight"]) {
           let targetYaw = Math.atan2(
@@ -155,7 +189,6 @@ export const Drone = forwardRef(function Drone(props, ref) {
     let targetRoll = 0;
     if (k["KeyA"]) targetRoll += MAX_TILT;
     if (k["KeyE"]) targetRoll -= MAX_TILT;
-    // Le roll visuel ne s'applique que si on est en mouvement (vitesse > 0)
     if (speed > 0) {
       if (k["ArrowLeft"]) targetRoll += MAX_TILT;
       if (k["ArrowRight"]) targetRoll -= MAX_TILT;
@@ -182,7 +215,6 @@ export const Drone = forwardRef(function Drone(props, ref) {
     // =========================================================
     rotorRefs.current.forEach((rotor) => {
       if (rotor) {
-        // Les rotors tournent plus vite si la vitesse augmente
         rotor.rotation.y += dt * (25 + speed * 2);
       }
     });
@@ -223,13 +255,11 @@ export const Drone = forwardRef(function Drone(props, ref) {
 
       <group ref={ref} position={[0, 5, 0]} {...props}>
         <group ref={innerRef}>
-          {/* Corps */}
           <mesh>
             <boxGeometry args={[1.4, 0.35, 1.4]} />
             <meshStandardMaterial color="#2b2f36" />
           </mesh>
 
-          {/* Bras + rotors */}
           {ARM_POSITIONS.map((p, i) => {
             const angle = Math.atan2(p.x, p.z);
 
